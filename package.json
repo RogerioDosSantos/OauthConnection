@@ -6,6 +6,23 @@
   "scripts": {
 	"start": "node server.js"
   },
+  "dependencies": {
+    "express": "~4.9.x"
+  },
+  "engines": {
+    "node": "0.12.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RogerioDosSantos/OauthConnection"
+  },
+  "keywords": [
+    "node",
+    "heroku",
+    "express",
+	"oauth"
+  ],
+  "license": "MIT",
   "author": {
     "name": "Rogerio dos Santos",
     "email": "rogerio.santos.main@gmail.com"
