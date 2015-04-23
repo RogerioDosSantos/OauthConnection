@@ -1,5 +1,5 @@
 {
-  "name": "WebApplicationTutorial",
+  "name": "OauthConnection",
   "version": "0.0.0",
   "description": "OauthConnection",
   "main": "server.js",
