@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "OauthConnection",
   "main": "server.js",
+  "scripts": {
+	"start": "node server.js"
+  },
   "author": {
     "name": "Rogerio dos Santos",
     "email": "rogerio.santos.main@gmail.com"
