@@ -5,7 +5,7 @@ var OAuth2 = require('./ThirdParty/node-oauth/oauth2.js').OAuth2;
 
 var clientID = "04c56461b9d1392277dd";
 var clientSecret = "a681efffcfb1e60c05661b8d9769ab201dde4c75";
-var port = 8080;
+var port = process.env.port || 8080;
 var redirectUri = "https://oauth-connection.herokuapp.com";
 redirectUri += ":" + port;
 redirectUri += "/code"
