@@ -84,9 +84,14 @@
 var port = process.env.PORT || 8080;
 var http = require("http");
 
+var clientID = process.env.GITHUB_CLIENT || "Invalid Github Client";
+var clientSecret = process.env.GITHUB_SECRET || "Invalid Github Secret";
+
 http.createServer(function (request, response) {
     response.writeHead(200, { "Content-Type": "text/plain" });
     response.write("Hello World");
+    response.write("\n- " + clientID);
+    response.write("\n- " + clientSecret);
     response.end();
 
     console.log("I am working");
