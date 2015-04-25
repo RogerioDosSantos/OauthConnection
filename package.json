@@ -9,7 +9,7 @@
   "dependencies": {
   },
   "engines": {
-    "node": "0.12.2",
+    "node": "0.10.29",
 	"npm": "1.1.x"
   },
   "repository": {
