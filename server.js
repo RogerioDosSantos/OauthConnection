@@ -10,7 +10,7 @@ var OAuth2 = require('./ThirdParty/node-oauth/oauth2.js').OAuth2;
 var clientID = GithubClient;
 var clientSecret = GithubSecret;
 var redirectUri = "https://oauth-connection.herokuapp.com";
-redirectUri += ":" + port;
+//redirectUri += ":" + port;
 redirectUri += "/code"
 
 var oauth2 = new OAuth2(clientID,
