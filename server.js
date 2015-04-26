@@ -9,7 +9,7 @@ var Oauth2 = require('./ThirdParty/node-oauth/oauth2.js').OAuth2;
 var _port = process.env.PORT || 8080;
 var _githubClient = process.env.GITHUB_CLIENT || "04c56461b9d1392277dd";
 var _githubSecret = process.env.GITHUB_SECRET || "db3bd6e7393d2910b9f62bbb5c845e9b767ab784";
-var _redirectUri = "https://oauth-connection.herokuapp.com";
+var _redirectUri = "https://oauth-connection.herokuapp.com/Github";
 
 var _githubOauth = new Oauth2(_githubClient, _githubSecret, "https://github.com/",
     "login/oauth/authorize", "login/oauth/access_token", null /** Custom headers */);
@@ -263,7 +263,7 @@ Http.createServer(function (request, response) {
             error = !requestAuthentication(options.id, response);
             break;
 
-        case "code":
+        case "Github":
             error = !requestAuthenticationPhase1(options);
             break;
 
