@@ -166,7 +166,12 @@ function getAccessToken(providerType, authenticationCode) {
         return deferred.promise;
     }
 
-    providerConfig.githubOauth.getOAuthAccessToken(
+    if (providerConfig.oauth2 == null) {
+        deferred.reject(new Error(-1, "Invalid provider config."));
+        return deferred.promise;
+    }
+
+    providerConfig.oauth2.getOAuthAccessToken(
         authenticationCode,
         { 'redirect_uri': providerConfig.redirectUri },
         function (error, accessToken, refresh_token, results) {
