@@ -131,6 +131,7 @@ function getProviderConfig(providerType) {
         return null;
     }
 
+    providerType = parseInt(providerType);
     return _providerConfigByType.get(providerType);
 }
 
@@ -244,31 +245,10 @@ function queryStringToJson(request) {
 
 function test(options, response) {
 
-    //var tokenId = "0-TestID";
-    //var token01 = getToken(tokenId);
-    //setToken(tokenId, "This is the token value!");
-    //var token02 = getToken(tokenId);
-    ////_tokenById[tokenId] = "This is the new value";
-    ////var token03 = _tokenById[tokenId];
-    ////_tokenById["0-TestID"] = "This is the new value 1";
-    ////var token04 = _tokenById[tokenId];
-    ////var token05 = _tokenById["0-TestID"];
-    //console.log("Direct: " + _tokenById.has(tokenId));
-    //console.log("Direct1: " + _tokenById.has("0-TestID"));
-    //console.log("Direct2: " + _tokenById.has("tokenId"));
 
-    ////console.log(_tokenById);
-    ////var token6 = _tokenById["newKey"];
-    //console.log(_tokenById);
-
-    //sendResponse(response, {
-    //    tokenId: tokenId,
-    //    token01: token01,
-    //    token02: token02
-    //    //token03: token03,
-    //    //token04: token04,
-    //    //token05: token05
-    //});
+    sendResponse(response, {
+        provider: getProviderConfig("0")
+    });
 
     return true;
 }
