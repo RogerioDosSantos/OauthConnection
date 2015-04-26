@@ -89,14 +89,14 @@ function Error(level, description) {
 function populateApplicationConfig() {
     var githubClient = process.env.GITHUB_CLIENT || "04c56461b9d1392277dd";
     var githubSecret = process.env.GITHUB_SECRET || "db3bd6e7393d2910b9f62bbb5c845e9b767ab784";
-    _providerConfigByType[ProviderType.github] = {
+    _providerConfigByType.set(ProviderType.github, {
         name: "github",
         user: githubClient,
         secret: githubSecret,
         redirectUri: "https://oauth-connection.herokuapp.com/Github",
         oauth2: new Oauth2(githubClient, githubSecret, "https://github.com/",
         "login/oauth/authorize", "login/oauth/access_token", null /** Custom headers */)
-    }
+    })
 }
 
 function setToken(tokenId, token) {
@@ -104,23 +104,24 @@ function setToken(tokenId, token) {
         throw new Error(1, "Invalid Token id");
     }
 
+    tokenId = tokenId.toString();
     if (_tokenById.length > 10000) {
         log(LogType.warning, 1, "Token by id is consuming too much memory.");
-        //_tokenById.clear
+        _tokenById.clear();
     }
 
     log(LogType.info, 5, "Added new token: id= " + tokenId);
-    _tokenById[tokenId] = token;
+    _tokenById.set(tokenId, token);
 }
 
 function getToken(tokenId) {
-    var id = tokenId || "";
+    var id = tokenId.toString() || "";
     if (!_tokenById.has(id)) {
         log(LogType.info, 5, "Could not find token: id= " + id);
         return "";
     }
 
-    return _tokenById[id];
+    return _tokenById.get(id);
 }
 
 
@@ -130,7 +131,7 @@ function getProviderConfig(providerType) {
         return null;
     }
 
-    return _providerConfigByType[providerType];
+    return _providerConfigByType.get(providerType);
 }
 
 function getAuthorizeUrl(providerType, id) {
@@ -209,10 +210,10 @@ function getUserConfig(applicationName, id) {
     applicationName = applicationName.toLowerCase();
 
     var appNameIdKey = applicationName + "-" + id;
-    var userConfig = _userConfigByAppNameIdKey[appNameIdKey];
+    var userConfig = _userConfigByAppNameIdKey.get(appNameIdKey);
     if (userConfig == null) {
         userConfig = new UserConfig(applicationName, id);
-        _userConfigByAppNameIdKey[appNameIdKey] = userConfig;
+        _userConfigByAppNameIdKey.set(appNameIdKey, userConfig);
         log(LogType.info, 1, "New user configuration: " + JSON.stringify(userConfig));
     }
 
@@ -241,29 +242,34 @@ function queryStringToJson(request) {
     return urlQueryToJson(url.query);
 }
 
-function test(id, response) {
-    if (id == null) {
-        log(LogType.error, 1, "Invalid id");
-        return false;
-    }
+function test(options, response) {
 
-    /**
-     * Creating an anchor with authURL as href and sending as response
-     */
-    var authURL = getAuthorizeUrl(ProviderType.github, id);
-    var body = "<br /><br />";
-    body += "<a href='" + authURL + "'> Get Code </a>";
+    //var tokenId = "0-TestID";
+    //var token01 = getToken(tokenId);
+    //setToken(tokenId, "This is the token value!");
+    //var token02 = getToken(tokenId);
+    ////_tokenById[tokenId] = "This is the new value";
+    ////var token03 = _tokenById[tokenId];
+    ////_tokenById["0-TestID"] = "This is the new value 1";
+    ////var token04 = _tokenById[tokenId];
+    ////var token05 = _tokenById["0-TestID"];
+    //console.log("Direct: " + _tokenById.has(tokenId));
+    //console.log("Direct1: " + _tokenById.has("0-TestID"));
+    //console.log("Direct2: " + _tokenById.has("tokenId"));
 
-    body += "<script type='text/javascript'>";
-    body += "window.location.href = '" + authURL + "'";
-    body += "</script>";
+    ////console.log(_tokenById);
+    ////var token6 = _tokenById["newKey"];
+    //console.log(_tokenById);
 
+    //sendResponse(response, {
+    //    tokenId: tokenId,
+    //    token01: token01,
+    //    token02: token02
+    //    //token03: token03,
+    //    //token04: token04,
+    //    //token05: token05
+    //});
 
-    response.writeHead(200, {
-        'Content-Length': body.length,
-        'Content-Type': 'text/html'
-    });
-    response.end(body);
     return true;
 }
 
@@ -465,7 +471,7 @@ Http.createServer(function (request, response) {
             break;
 
         case "Test":
-            error = !test(options.id, response);
+            error = !test(options, response);
             break;
 
 
