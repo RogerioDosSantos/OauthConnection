@@ -192,7 +192,7 @@ function test(id, response) {
     return true;
 }
 
-function requestAuthenticationPhase1(options) {
+function requestAuthenticationPhase1(options, response) {
     if (options == null) {
         log(LogType.error, 1, "Invalid options");
         return false;
@@ -204,16 +204,20 @@ function requestAuthenticationPhase1(options) {
         return false;
     }
 
-    var response = _responseByID[id];
+    //var response = _responseByID[id];
     if (response == null) {
         log(LogType.error, 1, "Could not find response: id = " + id);        
         return false;
     }
 
-
+    var authCode = options.code;
+    if (authCode == null) {
+        sendError(response, -3, "Could not find authentication code!");
+        return true;
+    }
 
     /** Obtaining access token */
-    oauth2.getOAuthAccessToken(
+    _githubOauth.getOAuthAccessToken(
         authCode,
         { 'redirect_uri': _redirectUri },
         function (error, accessToken, refresh_token, results) {
@@ -264,7 +268,7 @@ Http.createServer(function (request, response) {
             break;
 
         case "Github":
-            error = !requestAuthenticationPhase1(options);
+            error = !requestAuthenticationPhase1(options, response);
             break;
 
         case "DebugOptions":
