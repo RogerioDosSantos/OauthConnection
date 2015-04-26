@@ -3,29 +3,33 @@ var URL = require("url");
 var QueryString = require('querystring');
 //var Request = require('request');
 var Map = require("collections/map");
+var Q = require("q");
 //var _oauth = require('oauth'), OAuth2 = OAuth.OAuth2;
 var Oauth2 = require('./ThirdParty/node-oauth/oauth2.js').OAuth2;
 
 var _port = process.env.PORT || 8080;
-var _githubClient = process.env.GITHUB_CLIENT || "04c56461b9d1392277dd";
-var _githubSecret = process.env.GITHUB_SECRET || "db3bd6e7393d2910b9f62bbb5c845e9b767ab784";
-var _redirectUri = "https://oauth-connection.herokuapp.com/Github";
-
-var _githubOauth = new Oauth2(_githubClient, _githubSecret, "https://github.com/",
-    "login/oauth/authorize", "login/oauth/access_token", null /** Custom headers */);
-var _responseByID = new Map({});
+var _providerConfigByType = new Map({});
+var _userConfigByAppNameIdKey = new Map({})
+var _tokenById = new Map({});
 var _debugOptions = {};
 
 var LogType = {
     error: 0,
     warning: 1,
-    info: 2
+    info: 2,
+    rankLast: 3
 };
 
-function log(logType, level, description) {
+var ProviderType = {
+    github: 0,
+    evernote: 1,
+    rankLast: 2
+}
+
+function log(logType, level, description, caller) {
     if (_debugOptions.enableLog == 0)
         return;
-    
+
     var enabled = true;
     if (_debugOptions.verbose == 0) {
         switch (logType) {
@@ -50,15 +54,166 @@ function log(logType, level, description) {
     if (!enabled)
         return;
 
-    var caller = log.caller;
-    caller = caller.name || "Unknown";
+    if (caller == null)
+        caller = log.caller;
 
-    var message = "[Type: " + logType + ", Level: " + level + ", Function: " + caller + "] - " + description;
+    var functionName = caller.name || "Unknown";
+    var message = "[Type: " + logType + ", Level: " + level + ", Function: " + functionName + "] - " + description;
     if (_debugOptions.console > 0) {
         console.log(message);
     }
 }
 
+function UserConfig(applicationName, id) {
+    this.applicationName = applicationName;
+    this.id = id;
+
+    UserConfig.prototype.getTokenId = function (providerType) {
+        if (providerType == null)
+            return "";
+
+        if (providerType == null || ProviderType.rankLast <= providerType)
+            return "";
+
+        return providerType + "-" + id;
+    }
+}
+
+function Error(level, description) {
+    var caller = Error.caller;
+    this.functionName = caller.name || "Unknown";
+    this.description = description;
+    this.name = "UserException";
+    this.level = level;
+
+    log(LogType.error, level, description, caller);
+}
+
+function populateApplicationConfig() {
+    var githubClient = process.env.GITHUB_CLIENT || "04c56461b9d1392277dd";
+    var githubSecret = process.env.GITHUB_SECRET || "db3bd6e7393d2910b9f62bbb5c845e9b767ab784";
+    _providerConfigByType[ProviderType.github] = {
+        name: "github",
+        user: githubClient,
+        secret: githubSecret,
+        redirectUri: "https://oauth-connection.herokuapp.com/Github",
+        oauth2: new Oauth2(githubClient, githubSecret, "https://github.com/",
+        "login/oauth/authorize", "login/oauth/access_token", null /** Custom headers */)
+    }
+}
+
+function setToken(tokenId, token) {
+    if (tokenId == null || tokenId == "") {
+        throw new Error(1, "Invalid Token id");
+    }
+
+    if (_tokenById.length > 10000) {
+        log(LogType.warning, 1, "Token by id is consuming too much memory.");
+        //_tokenById.clear
+    }
+
+    log(LogType.info, 5, "Added new token: id= " + tokenId);
+    _tokenById[tokenId] = token;
+}
+
+function getToken(tokenId) {
+    var id = tokenId || "";
+    if (!_tokenById.has(id))
+        return "";
+
+    return _tokenById[id];
+}
+
+
+function getProviderConfig(providerType) {
+    if (providerType == null || ProviderType.rankLast <= providerType) {
+        log(LogType.error, 1, "Invalid provider type");
+        return null;
+    }
+
+    return _providerConfigByType[providerType];
+}
+
+function getAuthorizeUrl(providerType, id) {
+    var providerConfig = getProviderConfig(providerType);
+    if (providerConfig == null) {
+        log(LogType.error, 5, "Could not get provider configuration");
+        return "";
+    }
+
+    if (id == null) {
+        log(LogType.error, 1, "Invalid id");
+        return "";
+    }
+
+    return providerConfig.oauth2.getAuthorizeUrl({
+        redirect_uri: providerConfig.redirectUri,
+        scope: ['repo', 'user'],
+        state: id
+    });
+}
+
+function getAccessToken(providerType, authenticationCode) {
+    var deferred = Q.defer();
+    var providerConfig = getProviderConfig(providerType);
+    if (providerConfig == null) {
+        deferred.reject(new Error(5, "Could not get provider configuration"));
+        return deferred.promise;
+    }
+
+    if (authenticationCode == null) {
+        deferred.reject(new Error(1, "Invalid authentication code."));
+        return deferred.promise;
+    }
+
+    providerConfig.githubOauth.getOAuthAccessToken(
+        authenticationCode,
+        { 'redirect_uri': providerConfig.redirectUri },
+        function (error, accessToken, refresh_token, results) {
+            if (error) {
+                deferred.reject(new Error(2, error));
+                return;
+            }
+
+            if (results.error) {
+                deferred.reject(new Error(2, results));
+                return;
+            }
+
+            deferred.resolve({
+                result: results,
+                accessToken: accessToken
+            });
+
+            log(LogType.info, 1, "Obtained accessToken: " + accessToken);                        
+        });
+
+    return deferred.promise;
+}
+
+function getUserConfig(applicationName, id) {
+    if (id == null) {
+        log(LogType.error, 1, "Invalid id");
+        return null;
+    }
+
+    if (applicationName == null) {
+        log(LogType.error, 1, "Invalid application name");
+        return null;
+    }
+
+    applicationName = applicationName.toLowerCase();
+
+    var appNameIdKey = applicationName + "-" + id;
+    var userConfig = _userConfigByAppNameIdKey[appNameIdKey];
+    if (userConfig == null) {
+        userConfig = new UserConfig(applicationName, id);
+        _userConfigByAppNameIdKey[appNameIdKey] = userConfig;
+        log(LogType.info, 1, "New user configuration: " + JSON.stringify(userConfig));
+    }
+
+    return userConfig;
+}
 
 function urlQueryToJson(query) {
     if (query == null)
@@ -82,31 +237,39 @@ function queryStringToJson(request) {
     return urlQueryToJson(url.query);
 }
 
-function requestAuthentication(id, response) {
+function test(id, response) {
     if (id == null) {
         log(LogType.error, 1, "Invalid id");
         return false;
     }
-        
-    var authURL = _githubOauth.getAuthorizeUrl({
-        redirect_uri: _redirectUri,
-        scope: ['repo', 'user'],
-        state: id
+
+    /**
+     * Creating an anchor with authURL as href and sending as response
+     */
+    var authURL = getAuthorizeUrl(ProviderType.github, id);
+    var body = "<br /><br />";
+    body += "<a href='" + authURL + "'> Get Code </a>";
+
+    body += "<script type='text/javascript'>";
+    body += "window.location.href = '" + authURL + "'";
+    body += "</script>";
+
+
+    response.writeHead(200, {
+        'Content-Length': body.length,
+        'Content-Type': 'text/html'
     });
-
-    _responseByID[id] = response;
-
-    //Request(authURL, function (error, response, body) {
-    //    if (!error && response.statusCode == 200) {
-    //        var resp = _responseByID[id];
-    //        resp.end(body);
-    //    }
-    //});
-
-    response.writeHead(301, { Location: authURL });
-    response.end();
-
+    response.end(body);
     return true;
+}
+
+function sendError(response, errorCode, errorDescription) {
+    sendResponse(response, {
+        error: {
+            code: errorCode,
+            description: errorDescription
+        }
+    });
 }
 
 function sendResponse(response, result) {
@@ -117,13 +280,65 @@ function sendResponse(response, result) {
     response.end();
 }
 
-function sendError(response, errorCode, errorDescription) {
+function requestToken(options, response) {
+    options = options || {};
+    if (options.providerType == null) {
+        log(LogType.error, 1, "Invalid provider");
+        return false;
+    }
+
+    var userConfig = getUserConfig(options.applicationName, options.id);
+    if (userConfig == null) {
+        log(LogType.error, 5, "Could not get user config");
+        return false;
+    }
+
+    var tokenId = userConfig.getTokenId(options.providerType);
+    if (tokenId == "") {
+        log(LogType.error, 1, "Provider not supported. Provider: " + options.providerType);
+        return false;
+    }
+
+    var token = getToken(tokenId);
+    var needAuthentication = token == "";
+
     sendResponse(response, {
-        error: {
-            code: errorCode,
-            description: errorDescription
-        }
+        token: token,
+        needAuthentication: needAuthentication
     });
+    return true;
+}
+
+function requestAuthenticationPhase0(options, response) {
+    options = options || {};
+    var userConfig = getUserConfig(options.applicationName, options.id);
+    if (userConfig == null) {
+        log(LogType.error, 5, "Could not get user config");
+        return false;
+    }
+
+    var id = userConfig.getTokenId(options.providerType);
+    if (id == "") {
+        log(LogType.error, 1, "Could not get token id. Provider: " + options.providerType);
+        return false;
+    }
+
+    var authURL = getAuthorizeUrl(options.providerType, id);
+    if (!authURL) {
+        log(LogType.error, 5, "Could not get authentication URL.");
+        return false;
+    }
+
+    var body = "<script type='text/javascript'>";
+    body += "window.location.href = '" + authURL + "'";
+    body += "</script>";
+    response.writeHead(200, {
+        'Content-Length': body.length,
+        'Content-Type': 'text/html'
+    });
+    response.end(body);
+
+    return true;
 }
 
 function parseValue(value, defaultValue) {
@@ -167,31 +382,6 @@ function getPath(request, index) {
     return path[0];
 }
 
-function test(id, response) {
-    if (id == null) {
-        log(LogType.error, 1, "Invalid id");
-        return false;
-    }
-
-    /**
-     * Creating an anchor with authURL as href and sending as response
-     */
-    var body = "redirectUri = " + _redirectUri;
-    var authURL = _githubOauth.getAuthorizeUrl({
-        redirect_uri: _redirectUri,
-        scope: ['repo', 'user'],
-        state: id
-    });
-    body += "<br /><br />";
-    body += "<a href='" + authURL + "'> Get Code </a>";
-    response.writeHead(200, {
-        'Content-Length': body.length,
-        'Content-Type': 'text/html'
-    });
-    response.end(body);
-    return true;
-}
-
 function requestAuthenticationPhase1(options, response) {
     if (options == null) {
         log(LogType.error, 1, "Invalid options");
@@ -204,7 +394,6 @@ function requestAuthenticationPhase1(options, response) {
         return false;
     }
 
-    //var response = _responseByID[id];
     if (response == null) {
         log(LogType.error, 1, "Could not find response: id = " + id);        
         return false;
@@ -216,25 +405,15 @@ function requestAuthenticationPhase1(options, response) {
         return true;
     }
 
-    /** Obtaining access token */
-    _githubOauth.getOAuthAccessToken(
-        authCode,
-        { 'redirect_uri': _redirectUri },
-        function (error, accessToken, refresh_token, results) {
-
-            if (error) {
-                sendError(response, -2, error);
-                return;
-            }
-
-            if (results.error) {
-                sendResponse(response, results);
-            }
-
-            log(LogType.info, 1, "Obtained accessToken: " + accessToken);
+    getAccessToken(ProviderType.github, authCode)
+        .then(function (result) {
+            setToken(id, result.accessToken);
             sendResponse(response, {
-                accessToken: accessToken
+                accessToken: result.accessToken
             });
+        })
+        .fail(function (error) {
+            sendError(response, -2, error);
         });
 
     return true;
@@ -242,29 +421,35 @@ function requestAuthenticationPhase1(options, response) {
 
 Http.createServer(function (request, response) {
 
-    if (request.method == "POST") {
-        var body = "";
-        request.on('data', function (data) {           
-            body += data;
-        });
+    //if (request.method == "POST") {
+    //    var body = "";
+    //    request.on('data', function (data) {           
+    //        body += data;
+    //    });
 
-        var options = null;
-        request.on('end', function () {
-            options = urlQueryToJson(body);
+    //    var options = null;
+    //    request.on('end', function () {
+    //        options = urlQueryToJson(body);
 
-            requestAuthentication(options.id, response);
-        });
+    //        requestAuthenticationPhase0(options, response);
+    //    });
 
-        return;
-    }
+    //    return;
+    //}
 
     var path = getPath(request);
+    log(LogType.info, 5, "Received command for Path: " + path);
+
     var options = queryStringToJson(request);
     var result = {};
     var error = false;
     switch (path) {
+        case "Token":
+            error = !requestToken(options, response);
+            break;
+
         case "Authenticate":
-            error = !requestAuthentication(options.id, response);
+            error = !requestAuthenticationPhase0(options, response);
             break;
 
         case "Github":
@@ -294,143 +479,8 @@ Http.createServer(function (request, response) {
 
     return;
 
-    ///**
-    // * Creating an anchor with authURL as href and sending as response
-    // */
-    //var body = "redirectUri = " + redirectUri;
-    //body += "<br /><br />";
-    //body += "<a href='" + authURL + "'> Get Code </a>";
-    //if (pLen === 2 && p[1] === '') {
-    //    res.writeHead(200, {
-    //        'Content-Length': body.length,
-    //        'Content-Type': 'text/html'
-    //    });
-    //    res.end(body);
-    //} else if (pLen === 2 && p[1].indexOf('code') === 0) {
-
-    //    /** Github sends auth code so that access_token can be obtained */
-    //    var qsObj = {};
-
-    //    /** To obtain and parse code='...' from code?code='...' */
-    //    qsObj = qs.parse(p[1].split('?')[1]);
-
-    //    /** Obtaining access_token */
-    //    oauth2.getOAuthAccessToken(
-    //        qsObj.code,
-    //        { 'redirect_uri': redirectUri },
-    //        function (e, access_token, refresh_token, results) {
-    //            if (e) {
-    //                console.log(e);
-    //                res.end(e);
-    //            } else if (results.error) {
-    //                console.log(results);
-    //                res.end(JSON.stringify(results));
-    //            }
-    //            else {
-    //                console.log('Obtained access_token: ', access_token);
-    //                res.end(access_token);
-    //            }
-    //        });
-
-    //} else {
-
-    //}
-   
 }).listen(_port);
 
+populateApplicationConfig();
 debugOptions(null, null);
 console.log("Server Running - Port: " + _port);
-
-
-
-
-
-
-
-
-
-
-//var port = process.env.PORT || 8080;
-//var GithubClient = process.env.GITHUB_CLIENT || "Invalid Github Client";
-//var GithubSecret = process.env.GITHUB_SECRET || "Invalid Github Secret";
-
-//var http = require('http');
-//var qs = require('querystring');
-//// var OAuth = require('oauth'), OAuth2 = OAuth.OAuth2;
-//var OAuth2 = require('./ThirdParty/node-oauth/oauth2.js').OAuth2;
-
-//var clientID = GithubClient;
-//var clientSecret = GithubSecret;
-//var redirectUri = "https://oauth-connection.herokuapp.com";
-////redirectUri += ":" + port;
-//redirectUri += "/code"
-
-//var oauth2 = new OAuth2(clientID,
-//                        clientSecret,
-//                        'https://github.com/',
-//                        'login/oauth/authorize',
-//                        'login/oauth/access_token',
-//                        null); /** Custom headers */
-
-//http.createServer(function (req, res) {
-//    var p = req.url.split('/');
-//    pLen = p.length;
-
-//    /**
-//     * Authorised url as per github docs:
-//     * https://developer.github.com/v3/oauth/#redirect-users-to-request-github-access
-//     * 
-//     * getAuthorizedUrl: https://github.com/ciaranj/node-oauth/blob/master/lib/oauth2.js#L148
-//     * Adding params to authorize url with fields as mentioned in github docs
-//     *
-//     */
-//    var authURL = oauth2.getAuthorizeUrl({
-//        redirect_uri: redirectUri,
-//        scope: ['repo', 'user'],
-//        state: 'some random string to protect against cross-site request forgery attacks'
-//    });
-
-
-//    /**
-//     * Creating an anchor with authURL as href and sending as response
-//     */
-//    var body = "redirectUri = " + redirectUri;
-//    body += "<br /><br />";
-//    body += "<a href='" + authURL + "'> Get Code </a>";
-//    if (pLen === 2 && p[1] === '') {
-//        res.writeHead(200, {
-//            'Content-Length': body.length,
-//            'Content-Type': 'text/html'
-//        });
-//        res.end(body);
-//    } else if (pLen === 2 && p[1].indexOf('code') === 0) {
-
-//        /** Github sends auth code so that access_token can be obtained */
-//        var qsObj = {};
-
-//        /** To obtain and parse code='...' from code?code='...' */
-//        qsObj = qs.parse(p[1].split('?')[1]);
-
-//        /** Obtaining access_token */
-//        oauth2.getOAuthAccessToken(
-//            qsObj.code,
-//            { 'redirect_uri': redirectUri },
-//            function (e, access_token, refresh_token, results) {
-//                if (e) {
-//                    console.log(e);
-//                    res.end(e);
-//                } else if (results.error) {
-//                    console.log(results);
-//                    res.end(JSON.stringify(results));
-//                }
-//                else {
-//                    console.log('Obtained access_token: ', access_token);
-//                    res.end(access_token);
-//                }
-//            });
-
-//    } else {
-        
-//    }
-
-//}).listen(port);
