@@ -69,9 +69,6 @@ function UserConfig(applicationName, id) {
     this.id = id;
 
     UserConfig.prototype.getTokenId = function (providerType) {
-        if (providerType == null)
-            return "";
-
         if (providerType == null || ProviderType.rankLast <= providerType)
             return "";
 
@@ -118,8 +115,10 @@ function setToken(tokenId, token) {
 
 function getToken(tokenId) {
     var id = tokenId || "";
-    if (!_tokenById.has(id))
+    if (!_tokenById.has(id)) {
+        log(LogType.info, 5, "Could not find token: id= " + id);
         return "";
+    }
 
     return _tokenById[id];
 }
