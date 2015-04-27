@@ -135,7 +135,7 @@ function getProviderConfig(providerType) {
     return _providerConfigByType.get(providerType);
 }
 
-function getAuthorizeUrl(providerType, id) {
+function getAuthorizeUrl(providerType, id, returnUrl) {
     var providerConfig = getProviderConfig(providerType);
     if (providerConfig == null) {
         log(LogType.error, 5, "Could not get provider configuration");
@@ -150,7 +150,8 @@ function getAuthorizeUrl(providerType, id) {
     return providerConfig.oauth2.getAuthorizeUrl({
         redirect_uri: providerConfig.redirectUri,
         scope: ['repo', 'user'],
-        state: id
+        state: id,
+        returnUrl: returnUrl || ""
     });
 }
 
@@ -214,6 +215,11 @@ function getUserConfig(applicationName, id) {
     var userConfig = _userConfigByAppNameIdKey.get(appNameIdKey);
     if (userConfig == null) {
         userConfig = new UserConfig(applicationName, id);
+        if (_userConfigByAppNameIdKey.length > 10000) {
+            log(LogType.warning, 1, "User config by app name is consuming too much memory.");
+            _userConfigByAppNameIdKey.clear();
+        }
+
         _userConfigByAppNameIdKey.set(appNameIdKey, userConfig);
         log(LogType.info, 1, "New user configuration: " + JSON.stringify(userConfig));
     }
@@ -299,6 +305,17 @@ function requestToken(options, response) {
     return true;
 }
 
+function sendRedirection(url, response) {
+    var body = "<script type='text/javascript'>";
+    body += "window.location.href = '" + url + "'";
+    body += "</script>";
+    response.writeHead(200, {
+        'Content-Length': body.length,
+        'Content-Type': 'text/html'
+    });
+    response.end(body);
+}
+
 function requestAuthenticationPhase0(options, response) {
     options = options || {};
     var userConfig = getUserConfig(options.applicationName, options.id);
@@ -313,21 +330,13 @@ function requestAuthenticationPhase0(options, response) {
         return false;
     }
 
-    var authURL = getAuthorizeUrl(options.providerType, id);
+    var authURL = getAuthorizeUrl(options.providerType, id, options.returnUrl);
     if (!authURL) {
         log(LogType.error, 5, "Could not get authentication URL.");
         return false;
     }
 
-    var body = "<script type='text/javascript'>";
-    body += "window.location.href = '" + authURL + "'";
-    body += "</script>";
-    response.writeHead(200, {
-        'Content-Length': body.length,
-        'Content-Type': 'text/html'
-    });
-    response.end(body);
-
+    sendRedirection(authURL, response);
     return true;
 }
 
@@ -395,14 +404,27 @@ function requestAuthenticationPhase1(options, response) {
         return true;
     }
 
+    var returnUrl = options.returnUrl || "";
     getAccessToken(ProviderType.github, authCode)
         .then(function (result) {
             setToken(id, result.accessToken);
+            if (returnUrl != "") {
+                sendRedirection(returnUrl, response);
+                return;
+            }
+
             sendResponse(response, {
                 accessToken: result.accessToken
             });
+
+
         })
         .fail(function (error) {
+            if (returnUrl != "") {
+                sendRedirection(returnUrl, response);
+                return;
+            }
+
             sendError(response, -2, error);
         });
 
