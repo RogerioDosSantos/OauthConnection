@@ -11,6 +11,7 @@ var _port = process.env.PORT || 8080;
 var _providerConfigByType = new Map({});
 var _userConfigByAppNameIdKey = new Map({})
 var _tokenById = new Map({});
+var _returnUrlById = new Map({});
 var _debugOptions = {};
 
 var LogType = {
@@ -124,6 +125,32 @@ function getToken(tokenId) {
     return _tokenById.get(id);
 }
 
+function setReturnUrl(tokenId, returnUrl) {
+    if (tokenId == null) {
+        throw new Error(1, "Invalid Token id");
+    }
+
+    returnUrl = returnUrl || "";
+    tokenId = tokenId.toString();
+    if (_returnUrlById.length > 10000) {
+        log(LogType.warning, 1, "Return Url by id is consuming too much memory.");
+        _returnUrlById.clear();
+    }
+
+    log(LogType.info, 5, "Added new return Url: id= " + tokenId);
+    _returnUrlById.set(tokenId, returnUrl);
+}
+
+function getReturnUrl(tokenId) {
+    var id = tokenId.toString() || "";
+    if (!_returnUrlById.has(id)) {
+        log(LogType.info, 5, "Could not find return Url: id= " + id);
+        return "";
+    }
+
+    return _returnUrlById.get(id);
+}
+
 
 function getProviderConfig(providerType) {
     if (providerType == null || ProviderType.rankLast <= providerType) {
@@ -135,7 +162,7 @@ function getProviderConfig(providerType) {
     return _providerConfigByType.get(providerType);
 }
 
-function getAuthorizeUrl(providerType, id, returnUrl) {
+function getAuthorizeUrl(providerType, id) {
     var providerConfig = getProviderConfig(providerType);
     if (providerConfig == null) {
         log(LogType.error, 5, "Could not get provider configuration");
@@ -150,8 +177,7 @@ function getAuthorizeUrl(providerType, id, returnUrl) {
     return providerConfig.oauth2.getAuthorizeUrl({
         redirect_uri: providerConfig.redirectUri,
         scope: ['repo', 'user'],
-        state: id,
-        returnUrl: returnUrl || ""
+        state: id        
     });
 }
 
@@ -330,7 +356,9 @@ function requestAuthenticationPhase0(options, response) {
         return false;
     }
 
-    var authURL = getAuthorizeUrl(options.providerType, id, options.returnUrl);
+    setReturnUrl(options.returnUrl);
+
+    var authURL = getAuthorizeUrl(options.providerType, id);
     if (!authURL) {
         log(LogType.error, 5, "Could not get authentication URL.");
         return false;
@@ -404,7 +432,7 @@ function requestAuthenticationPhase1(options, response) {
         return true;
     }
 
-    var returnUrl = options.returnUrl || "";
+    var returnUrl = getReturnUrl(id);
     getAccessToken(ProviderType.github, authCode)
         .then(function (result) {
             setToken(id, result.accessToken);
