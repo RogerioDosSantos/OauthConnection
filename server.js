@@ -278,8 +278,11 @@ function queryStringToJson(request) {
 function test(options, response) {
 
 
+    var returnUrl = getReturnUrl(options.returnUrl);
+    //sendRedirection(returnUrl, response);
+
     sendResponse(response, {
-        provider: getProviderConfig("0")
+        returnUrl: returnUrl
     });
 
     return true;
@@ -331,7 +334,7 @@ function requestToken(options, response) {
     return true;
 }
 
-function sendRedirection(url, response) {
+function sendRedirection(response, url) {
     var body = "<script type='text/javascript'>";
     body += "window.location.href = '" + url + "'";
     body += "</script>";
@@ -364,7 +367,7 @@ function requestAuthenticationPhase0(options, response) {
         return false;
     }
 
-    sendRedirection(authURL, response);
+    sendRedirection(response, authURL);
     return true;
 }
 
@@ -437,7 +440,7 @@ function requestAuthenticationPhase1(options, response) {
         .then(function (result) {
             setToken(id, result.accessToken);
             if (returnUrl != "") {
-                sendRedirection(returnUrl, response);
+                sendRedirection(response, returnUrl);
                 return;
             }
 
@@ -449,7 +452,7 @@ function requestAuthenticationPhase1(options, response) {
         })
         .fail(function (error) {
             if (returnUrl != "") {
-                sendRedirection(returnUrl, response);
+                sendRedirection(response, returnUrl);
                 return;
             }
 
