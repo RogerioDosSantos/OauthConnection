@@ -282,7 +282,8 @@ function test(options, response) {
     //sendRedirection(returnUrl, response);
 
     sendResponse(response, {
-        returnUrl: returnUrl
+        returnUrl: returnUrl,
+        returnUrlById: _returnUrlById
     });
 
     return true;
