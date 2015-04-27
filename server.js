@@ -116,7 +116,8 @@ function setToken(tokenId, token) {
 }
 
 function getToken(tokenId) {
-    var id = tokenId.toString() || "";
+    var id = tokenId || "";
+    id = id.toString();
     if (!_tokenById.has(id)) {
         log(LogType.info, 5, "Could not find token: id= " + id);
         return "";
@@ -142,7 +143,8 @@ function setReturnUrl(tokenId, returnUrl) {
 }
 
 function getReturnUrl(tokenId) {
-    var id = tokenId.toString() || "";
+    var id = tokenId || "";
+    id = id.toString();
     if (!_returnUrlById.has(id)) {
         log(LogType.info, 5, "Could not find return Url: id= " + id);
         return "";
@@ -177,7 +179,7 @@ function getAuthorizeUrl(providerType, id) {
     return providerConfig.oauth2.getAuthorizeUrl({
         redirect_uri: providerConfig.redirectUri,
         scope: ['repo', 'user'],
-        state: id        
+        state: id
     });
 }
 
@@ -218,7 +220,7 @@ function getAccessToken(providerType, authenticationCode) {
                 accessToken: accessToken
             });
 
-            log(LogType.info, 1, "Obtained accessToken: " + accessToken);                        
+            log(LogType.info, 1, "Obtained accessToken: " + accessToken);
         });
 
     return deferred.promise;
@@ -275,20 +277,6 @@ function queryStringToJson(request) {
     return urlQueryToJson(url.query);
 }
 
-function test(options, response) {
-
-
-    var returnUrl = getReturnUrl(options.returnUrl);
-    //sendRedirection(returnUrl, response);
-
-    sendResponse(response, {
-        returnUrl: returnUrl,
-        returnUrlById: _returnUrlById
-    });
-
-    return true;
-}
-
 function sendError(response, errorCode, errorDescription) {
     sendResponse(response, {
         error: {
@@ -336,6 +324,9 @@ function requestToken(options, response) {
 }
 
 function sendRedirection(response, url) {
+
+    log(LogType.info, 5, "Redirecting to: " + url);
+
     var body = "<script type='text/javascript'>";
     body += "window.location.href = '" + url + "'";
     body += "</script>";
@@ -360,7 +351,7 @@ function requestAuthenticationPhase0(options, response) {
         return false;
     }
 
-    setReturnUrl(options.returnUrl);
+    setReturnUrl(id, options.returnUrl);
 
     var authURL = getAuthorizeUrl(options.providerType, id);
     if (!authURL) {
@@ -426,7 +417,7 @@ function requestAuthenticationPhase1(options, response) {
     }
 
     if (response == null) {
-        log(LogType.error, 1, "Could not find response: id = " + id);        
+        log(LogType.error, 1, "Could not find response: id = " + id);
         return false;
     }
 
@@ -459,6 +450,22 @@ function requestAuthenticationPhase1(options, response) {
 
             sendError(response, -2, error);
         });
+
+    return true;
+}
+
+function test(options, response) {
+
+
+    //var returnUrl = getReturnUrl(options.state);
+    //sendRedirection(response, returnUrl);
+
+    //sendRedirection(response, "chrome-extension://dlodcfnfnmkeemfkifamaoapgdjbmgbe/Pages/githnote.html");
+    //sendRedirection(response, "chrome-extension://dlodcfnfnmkeemfkifamaoapgdjbmgbe");
+    //sendRedirection(response, "https://www.google.com/");
+
+    sendResponse(response, {
+    });
 
     return true;
 }
@@ -515,7 +522,7 @@ Http.createServer(function (request, response) {
             sendResponse(response, result);
             break;
     }
-    
+
     if (error) {
         sendError(response, -1, "Error to execute " + path);
         return;
