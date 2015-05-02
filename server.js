@@ -223,7 +223,7 @@ function getAuthorizeUrl(providerType, id) {
             deferred.resolve({
                 url: providerConfig.oauth2.getAuthorizeUrl({
                     redirect_uri: providerConfig.redirectUri,
-                    scope: ['repo', 'user'],
+                    scope: "user,repo",
                     state: id
                 })
             });
